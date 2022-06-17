@@ -16,7 +16,7 @@ pub(crate) mod pattern;
 pub(crate) mod postfix;
 pub(crate) mod record;
 pub(crate) mod snippet;
-pub(crate) mod r#type;
+pub(crate) mod type_;
 pub(crate) mod use_;
 pub(crate) mod vis;
 

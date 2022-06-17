@@ -172,8 +172,8 @@ pub fn completions(
             completions::record::complete_record(acc, ctx);
             completions::snippet::complete_expr_snippet(acc, ctx);
             completions::snippet::complete_item_snippet(acc, ctx);
-            completions::r#type::complete_type_path(acc, ctx);
-            completions::r#type::complete_inferred_type(acc, ctx);
+            completions::type_::complete_type_path(acc, ctx);
+            completions::type_::complete_inferred_type(acc, ctx);
             completions::use_::complete_use_tree(acc, ctx);
         }
         completions::vis::complete_vis_path(acc, ctx);

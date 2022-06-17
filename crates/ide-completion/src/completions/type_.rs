@@ -189,6 +189,12 @@ pub(crate) fn complete_type_path(acc: &mut Completions, ctx: &CompletionContext)
 }
 
 pub(crate) fn complete_inferred_type(acc: &mut Completions, ctx: &CompletionContext) -> Option<()> {
+    if let Some(path_ctx) = ctx.path_context() {
+        if path_ctx.is_absolute_path || path_ctx.qualifier.is_some() {
+            return None;
+        }
+    }
+
     use TypeAnnotation::*;
     let pat = match &ctx.completion_location {
         Some(ImmediateLocation::TypeAnnotation(t)) => t,
@@ -209,5 +215,70 @@ fn add_assoc_item(acc: &mut Completions, ctx: &CompletionContext, item: hir::Ass
         hir::AssocItem::Const(ct) if ctx.expects_generic_arg() => acc.add_const(ctx, ct),
         hir::AssocItem::Function(_) | hir::AssocItem::Const(_) => (),
         hir::AssocItem::TypeAlias(ty) => acc.add_type_alias(ctx, ty),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use expect_test::{expect, Expect};
+
+    use crate::tests::completion_list_no_kw;
+
+    fn check(ra_fixture: &str, expect: Expect) {
+        let actual = completion_list_no_kw(ra_fixture);
+        expect.assert_eq(&actual);
+    }
+
+    #[test]
+    fn does_not_infer_type_in_absolute_path() {
+        check(
+            r#"
+        fn f() -> ::$0 { }
+"#,
+            expect![[r#""#]],
+        );
+    }
+
+    #[test]
+    fn completes_inferred_type() {
+        check(
+            r#"
+        mod m { pub struct MyStruct {} }
+        use m::MyStruct;
+        fn f() -> My$0 { MyStruct {} }
+"#,
+            expect![[r#"
+            md m
+            st MyStruct
+            bt u32
+            it MyStruct
+        "#]],
+        );
+    }
+
+    #[test]
+    fn does_not_complete_inferred_type_in_different_qualified_path() {
+        check(
+            r#"
+        mod m { pub struct MyStruct {} }
+        fn f() -> m::My$0 { 1 }
+"#,
+            expect![[r#"
+            st MyStruct
+        "#]],
+        );
+    }
+
+    #[test]
+    fn completes_inferred_type_in_same_qualified_path() {
+        check(
+            r#"
+        mod m { pub struct MyStruct {} }
+        fn f() -> m::My$0 { m::MyStruct {} }
+"#,
+            expect![[r#"
+            st MyStruct
+        "#]],
+        );
     }
 }
