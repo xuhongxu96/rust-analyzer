@@ -1,6 +1,6 @@
 //! Completion of names from the current scope in type position.
 
-use hir::{HirDisplay, ScopeDef};
+use hir::{HirDisplay, ModuleDef, PathResolution, ScopeDef};
 use ide_db::FxHashSet;
 use syntax::{ast, AstNode};
 
@@ -189,11 +189,15 @@ pub(crate) fn complete_type_path(acc: &mut Completions, ctx: &CompletionContext)
 }
 
 pub(crate) fn complete_inferred_type(acc: &mut Completions, ctx: &CompletionContext) -> Option<()> {
-    if let Some(path_ctx) = ctx.path_context() {
-        if path_ctx.is_absolute_path || path_ctx.qualifier.is_some() {
+    let path_qualifier = if let Some(path_ctx) = ctx.path_context() {
+        // Do not infer type in absolute path
+        if path_ctx.is_absolute_path {
             return None;
         }
-    }
+        path_ctx.qualifier.as_ref()
+    } else {
+        None
+    };
 
     use TypeAnnotation::*;
     let pat = match &ctx.completion_location {
@@ -205,7 +209,20 @@ pub(crate) fn complete_inferred_type(acc: &mut Completions, ctx: &CompletionCont
         Const(exp) | RetType(exp) => ctx.sema.type_of_expr(exp.as_ref()?),
     }?
     .adjusted();
-    let ty_string = x.display_source_code(ctx.db, ctx.module.into()).ok()?;
+
+    let qualified_module = match path_qualifier.and_then(|q| q.resolution.as_ref()) {
+        // If a path qualifier is present, check if the type is an ADT in the same module path.
+        // Drop the inferred type if it is not an ADT or in a different module path.
+        Some(PathResolution::Def(ModuleDef::Module(module))) => {
+            if x.as_adt()?.module(ctx.db) != *module {
+                return None;
+            }
+            *module
+        }
+        _ => ctx.module,
+    };
+
+    let ty_string = x.display_source_code(ctx.db, qualified_module.into()).ok()?;
     acc.add(render_type_inference(ty_string, ctx));
     None
 }
@@ -278,6 +295,7 @@ mod tests {
 "#,
             expect![[r#"
             st MyStruct
+            it MyStruct
         "#]],
         );
     }
